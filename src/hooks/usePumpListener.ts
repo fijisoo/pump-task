@@ -4,6 +4,29 @@ import { PumpFunSDK } from "pumpdotfun-sdk";
 import { AnchorProvider } from "@coral-xyz/anchor";
 import NodeWallet from "@coral-xyz/anchor/dist/cjs/nodewallet";
 import type { Trade } from "@/ui/TradeList/TradeRow.tsx";
+import { createUmi } from "@metaplex-foundation/umi-bundle-defaults";
+import {
+  fetchDigitalAsset,
+  mplTokenMetadata,
+} from "@metaplex-foundation/mpl-token-metadata";
+import { publicKey } from "@metaplex-foundation/umi";
+
+const fetchMetadata = async (mintAddress2: string) => {
+  const umi = createUmi(import.meta.env.VITE_APP_HELIUS_RPC_URL).use(
+    mplTokenMetadata(),
+  );
+  const asset = await fetchDigitalAsset(umi, publicKey(mintAddress2));
+
+  const name = asset.metadata.name;
+  const symbol = asset.metadata.symbol;
+  const logo = asset.metadata.uri;
+
+  return {
+    name,
+    symbol,
+    logo,
+  };
+};
 
 export const usePumpListener = (
   mintAddress: string | undefined,
@@ -47,18 +70,25 @@ export const usePumpListener = (
       if (!isMounted) return;
       sdkRef.current = sdk;
 
-      const id = sdk.addEventListener("tradeEvent", (evt) => {
+      const id = sdk.addEventListener("tradeEvent", async (evt) => {
         if (evt.mint.toString() !== mintAddress) return;
+
+        const { name, symbol, logo } = await fetchMetadata(evt.mint.toString());
+        const metaResponse = await fetch(logo);
+        const meta = await metaResponse.json();
+
+        const imgUrl = meta.image;
 
         const trade: Trade = {
           id: crypto.randomUUID(),
           time: new Date().toLocaleTimeString(),
-          side: evt.isBuy ? "BUY" : "SELL",
-          amount: Number(evt.solAmount ?? 0),
-          user: evt.user.toString(),
+          side: evt?.isBuy ? "BUY" : "SELL",
+          amount: Number(evt?.solAmount),
+          user: evt?.user.toString(),
+          name: name || "",
+          symbol: symbol || "",
+          logo: imgUrl || "",
         };
-
-        console.log("TRADE::::::", trade);
 
         onTradeReceived(trade);
       });
